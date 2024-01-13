@@ -9,7 +9,7 @@ from functools import wraps
 from werkzeug.security import generate_password_hash, check_password_hash
 from sqlalchemy.orm import relationship
 # Import your forms from the forms.py
-from forms import CreatePostForm, RegisterForm
+from forms import CreatePostForm, RegisterForm, LoginForm
 
 
 '''
@@ -31,6 +31,12 @@ ckeditor = CKEditor(app)
 Bootstrap5(app)
 
 # TODO: Configure Flask-Login
+login_manager = LoginManager()
+login_manager.init_app(app)
+
+@login_manager.user_loader
+def load_user(user_id):
+    return db.get_or_404(User, user_id)
 
 
 # CONNECT TO DB
@@ -52,7 +58,7 @@ class BlogPost(db.Model):
 
 
 # TODO: Create a User table for all your registered users.
-class User(db.Model):
+class User(db.Model, UserMixin):
     __tablename__ = "User"
     id = db.Column(db.Integer, primary_key=True)
     email = db.Column(db.String(250), unique=True, nullable=False)
@@ -62,7 +68,6 @@ class User(db.Model):
 
 with app.app_context():
     db.create_all()
-
 
 @app.route('/register', methods=["POST", "GET"])
 def register():
@@ -76,14 +81,30 @@ def register():
         user = User(email=email, password=hashed_password, name=name)
         db.session.add(user)
         db.session.commit()
-        return redirect(url_for('login'))
+        login_user(user)
+        return redirect(url_for('get_all_posts'))
     return render_template("register.html", form=form)
 
 
 # TODO: Retrieve a user from the database based on their email. 
-@app.route('/login')
+@app.route('/login', methods=["POST", "GET"])
 def login():
-    return render_template("login.html")
+    form = LoginForm()
+    if form.validate_on_submit():
+        email = form.email.data
+        password = form.password.data
+        user = db.session.execute(db.select(User).where(User.email == email)).scalar()
+        if user:
+            if check_password_hash(user.password, password):
+                login_user(user)
+                return redirect(url_for('get_all_posts'))
+            else:
+                flash("Password Incorrect")
+                return redirect(url_for('login'))
+        else:
+            flash("Invalid email. Please try again")
+            return redirect(url_for('login'))
+    return render_template("login.html", form=form)
 
 
 @app.route('/logout')
