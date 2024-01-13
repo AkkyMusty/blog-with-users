@@ -78,6 +78,9 @@ def register():
         password = form.password.data
         hashed_password = generate_password_hash(password, method='pbkdf2:sha256',
             salt_length=8)
+        if db.session.execute(db.select(User).where(User.email == email)).scalar():
+            flash('Email has been registered. Log instead')
+            return redirect(url_for("login"))
         user = User(email=email, password=hashed_password, name=name)
         db.session.add(user)
         db.session.commit()
