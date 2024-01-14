@@ -45,33 +45,80 @@ db.init_app(app)
 
 
 # CONFIGURE TABLES
+# class BlogPost(db.Model):
+#     __tablename__ = "blog_posts"
+#     id = db.Column(db.Integer, primary_key=True)
+#     title = db.Column(db.String(250), unique=True, nullable=False)
+#     subtitle = db.Column(db.String(250), nullable=False)
+#     date = db.Column(db.String(250), nullable=False)
+#     body = db.Column(db.Text, nullable=False)
+#     # author = db.Column(db.String(250), nullable=False)
+#     img_url = db.Column(db.String(250), nullable=False)
+#
+#     # Create Foreign Key, "users.id" the users refers to the tablename of User.
+#     author_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+#     # Create reference to the User object, the "posts" refers to the posts property in the User class.
+#     author = relationship("User", back_populates="posts")
+#     post_comments = relationship("Comment", back_populates="parent_post")
+#
+#
+
+# class User(db.Model, UserMixin):
+#     __tablename__ = "users"
+#     id = db.Column(db.Integer, primary_key=True)
+#     email = db.Column(db.String(250), unique=True, nullable=False)
+#     password = db.Column(db.String(250), nullable=False)
+#     name = db.Column(db.String(250), nullable=False)
+#
+#     # This will act like a List of BlogPost objects attached to each User.
+#     # The "author" refers to the author property in the BlogPost class.
+#     posts = relationship("BlogPost", back_populates="author")
+#     comments = relationship("Comment", back_populates="comment_author")
+#
+# class Comment(db.Model):
+#     __tablename__ = "comments"
+#     id = db.Column(db.Integer, primary_key=True)
+#     text = db.Column(db.Text(), nullable=False)
+#     author_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+#     comment_author = relationship("User", back_populates="comments")
+#     parent_post = relationship("BlogPost", back_populates="post_comments")
+#     post_id = db.Column(db.Integer, db.ForeignKey("blog_posts.id"))
+
+class User(UserMixin, db.Model):
+    __tablename__ = "users"
+    id = db.Column(db.Integer, primary_key=True)
+    email = db.Column(db.String(100), unique=True)
+    password = db.Column(db.String(100))
+    name = db.Column(db.String(100))
+    posts = relationship("BlogPost", back_populates="author")
+    comments = relationship("Comment", back_populates="comment_author")
+
+
 class BlogPost(db.Model):
     __tablename__ = "blog_posts"
     id = db.Column(db.Integer, primary_key=True)
+    author_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    author = relationship("User", back_populates="posts")
     title = db.Column(db.String(250), unique=True, nullable=False)
     subtitle = db.Column(db.String(250), nullable=False)
     date = db.Column(db.String(250), nullable=False)
     body = db.Column(db.Text, nullable=False)
-    # author = db.Column(db.String(250), nullable=False)
     img_url = db.Column(db.String(250), nullable=False)
 
-    # Create Foreign Key, "users.id" the users refers to the tablename of User.
-    author_id = db.Column(db.Integer, db.ForeignKey("users.id"))
-    # Create reference to the User object, the "posts" refers to the posts property in the User class.
-    author = relationship("User", back_populates="posts")
+    # ***************Parent Relationship*************#
+    comments = relationship("Comment", back_populates="parent_post")
 
 
-# TODO: Create a User table for all your registered users.
-class User(db.Model, UserMixin):
-    __tablename__ = "users"
+class Comment(db.Model):
+    __tablename__ = "comments"
     id = db.Column(db.Integer, primary_key=True)
-    email = db.Column(db.String(250), unique=True, nullable=False)
-    password = db.Column(db.String(250), nullable=False)
-    name = db.Column(db.String(250), nullable=False)
+    author_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    comment_author = relationship("User", back_populates="comments")
 
-    # This will act like a List of BlogPost objects attached to each User.
-    # The "author" refers to the author property in the BlogPost class.
-    posts = relationship("BlogPost", back_populates="author")
+    # ***************Child Relationship*************#
+    post_id = db.Column(db.Integer, db.ForeignKey("blog_posts.id"))
+    parent_post = relationship("BlogPost", back_populates="comments")
+    text = db.Column(db.Text, nullable=False)
 
 
 with app.app_context():
@@ -129,7 +176,6 @@ def login():
 
 
 @app.route('/logout')
-@admin_only
 def logout():
     logout_user()
     return redirect(url_for('get_all_posts'))
@@ -147,6 +193,17 @@ def get_all_posts():
 def show_post(post_id):
     requested_post = db.get_or_404(BlogPost, post_id)
     comment_form = CommentForm()
+    if comment_form.validate_on_submit():
+        if current_user.is_authenticated:
+            comment_text = comment_form.comment.data
+            new_comment = Comment(text=comment_text,
+            comment_author=current_user,
+            parent_post=requested_post)
+            db.session.add(new_comment)
+            db.session.commit()
+        else:
+            flash("You have to log in before you can post comments")
+            return redirect(url_for("login"))
     return render_template("post.html", post=requested_post, form=comment_form)
 
 
